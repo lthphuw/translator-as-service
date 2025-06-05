@@ -1,0 +1,1 @@
+from application.main.infrastructure.translator.translator import UniversalTranslator

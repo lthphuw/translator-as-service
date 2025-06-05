@@ -1,0 +1,4 @@
+filename: "translator.log"
+formatter: "%(asctime)s - %(thread)d - %(name)s - %(levelname)s - %(message)s"
+json_formatter: true
+rotation: "midnight"
