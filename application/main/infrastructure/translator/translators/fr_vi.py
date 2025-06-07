@@ -1,30 +1,28 @@
 from application.main.infrastructure.translator.translators.base import BaseTranslator
 
 
-class ViEnTranslator(BaseTranslator):
-    model_name = "VietAI/envit5-translation"
-    model_type = "AutoModelForSeq2SeqLM"
+class FrViTranslator(BaseTranslator):
+    model_name = "Helsinki-NLP/opus-mt-fr-vi"
+    model_type = "MarianMTModel"
 
     def __init__(self):
         super().__init__()
         self.load_model()
 
     def translate(self, texts):
-        prefixed = [f"vi: {text}" for text in texts]
-        inputs = self.tokenizer(
-            prefixed,
+        batch = self.tokenizer(
+            texts,
             return_tensors=self._return_tensor,
             padding=self._padding,
             truncation=self._truncation,
             max_length=self._max_length,
         ).to(self._device)
-        outputs = self.model.generate(
-            inputs.input_ids,
+        generated_ids = self.model.generate(
+            **batch,
             max_length=self._max_length,
             num_beams=self._num_beams,
             early_stopping=self._stop_early,
         )
-        return [
-            it.replace("en: ", "")
-            for it in self.tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ]
+        return list(
+            self.tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+        )

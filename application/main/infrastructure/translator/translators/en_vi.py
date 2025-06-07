@@ -2,9 +2,11 @@ from application.main.infrastructure.translator.translators.base import BaseTran
 
 
 class EnViTranslator(BaseTranslator):
+    model_name = "VietAI/envit5-translation"
+    model_type = "AutoModelForSeq2SeqLM"
+
     def __init__(self):
         super().__init__()
-        self.model_name = "VietAI/envit5-translation"
         self.load_model()
 
     def translate(self, texts):
@@ -14,7 +16,6 @@ class EnViTranslator(BaseTranslator):
             return_tensors=self._return_tensor,
             padding=self._padding,
             truncation=self._truncation,
-            max_length=self._max_length,
         ).to(self._device)
         outputs = self.model.generate(
             inputs.input_ids,
