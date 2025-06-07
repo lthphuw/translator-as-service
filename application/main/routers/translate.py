@@ -58,7 +58,7 @@ async def translate(request: StarletteRequest, translation_request: TranslationR
                 "num_texts": len(translation_request.texts),
             },
         )
-
+        
         return JSONResponse(content=results, status_code=200)
 
     except ValueError as e:

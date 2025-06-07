@@ -1,24 +1,27 @@
-class LoggerInstance(object):
-    def __new__(cls):
-        from application.main.utility.logger.logging import LogHandler
-
-        return LogHandler()
-
-
 class IncludeAPIRouter(object):
     def __new__(cls):
         from fastapi.routing import APIRouter
 
         from application.main.routers.health_check import router as router_health_check
         from application.main.routers.translate import router as router_translator
+        from application.main.config import settings
+
+        # Get the major version
+        major =  settings.API_VERSION.split('.')[0]
+        prefix = f"/api/v{major}"
 
         router = APIRouter()
         router.include_router(
-            router_health_check, prefix="/api/v1", tags=["health_check"]
+            router_health_check, prefix=prefix, tags=["health_check"]
         )
-        router.include_router(router_translator, prefix="/api/v1", tags=["translate"])
+        router.include_router(router_translator, prefix=prefix, tags=["translate"])
         return router
 
+class LoggerInstance(object):
+    def __new__(cls):
+        from application.main.utility.logger.logging import LogHandler
+
+        return LogHandler()
 
 class DataBaseInstance(object):
     def __new__(cls):
@@ -39,7 +42,6 @@ class LimiterInstance(object):
         from application.main.infrastructure.rate_limiter import get_limiter
 
         return get_limiter()
-
 
 # instance creation
 logger_instance = LoggerInstance()

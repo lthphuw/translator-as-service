@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from application.initializer import IncludeAPIRouter
 from application.main.config import settings
 from application.main.infrastructure.rate_limiter.limiter import setup_rate_limit
-
+from application.main.middlewares import LoggingMiddleware
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -23,12 +23,15 @@ def get_application():
         lifespan=lifespan,
     )
     _app.include_router(IncludeAPIRouter())
+
     _app.add_middleware(
         CORSMiddleware,
         allow_credentials=False,
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    _app.add_middleware(LoggingMiddleware)
+
     setup_rate_limit(_app)
     return _app
 

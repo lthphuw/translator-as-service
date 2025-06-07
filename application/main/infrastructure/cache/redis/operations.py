@@ -2,18 +2,21 @@ import json
 import logging
 from typing import Any, Optional
 
-import redis.asyncio as redis  # Sử dụng async client cho FastAPI
+import pybreaker
+import redis
 from pytimeparse.timeparse import timeparse
 from redis.exceptions import ConnectionError, TimeoutError
 
 from application.main.config import settings
-from application.main.infrastructure.cache.cache_interface import CacheOperations
+from application.main.infrastructure.cache.cache_interface import ICacheOperations
 from application.main.utility.config_loader import ConfigReaderInstance
+from application.main.utility.retry import retry
 
 logger = logging.getLogger(__name__)
 
 
-class Redis(CacheOperations):
+class Redis(ICacheOperations):
+    @retry(service=__name__, logger=logger)
     def __init__(self):
         super().__init__()
         self.config = ConfigReaderInstance.yaml.read_config_from_file(
@@ -29,14 +32,19 @@ class Redis(CacheOperations):
 
         setattr(self.config, "ttl", ttl)
 
-        # Sử dụng connection pool cho thread-safety
-        self.pool = redis.ConnectionPool(
+        self.redis = redis.Redis(
             host=self.config.host,
             port=self.config.port,
-            decode_responses=True,
-            max_connections=10,
+            decode_responses=False,
         )
-        self.r = redis.Redis(connection_pool=self.pool)
+
+        self.redis_breaker = pybreaker.CircuitBreaker(
+            fail_max=3,
+            reset_timeout=60,
+            state_storage=pybreaker.CircuitRedisStorage(
+                pybreaker.STATE_CLOSED, self.redis
+            ),
+        )
 
     @classmethod
     def get_uri(cls, config: Any = None) -> str:
@@ -51,52 +59,49 @@ class Redis(CacheOperations):
         port = getattr(config, "port", 6379)
         return f"redis://{host}:{port}"
 
-    async def set(self, key: str, obj: Any, ttl: Optional[float] = None) -> None:
-        """
-        Set a key-value pair in Redis with optional TTL.
-        Serialize obj to JSON if it's not a string.
-        """
-        try:
-            value = obj if isinstance(obj, (str, bytes)) else json.dumps(obj)
-            async with self.r as client:
-                if ttl is not None:
-                    await client.set(key, value, ex=int(ttl))
-                else:
-                    await client.set(key, value, ex=int(self.config.ttl))
-        except (ConnectionError, TimeoutError) as e:
-            logger.error(f"Failed to set key {key} in Redis: {e}")
-            raise
+    def set(self, key: str, obj: Any, ttl: Optional[float] = None) -> None:
+        value = obj if isinstance(obj, (str, bytes)) else json.dumps(obj)
 
-    async def get(self, key: str) -> Optional[Any]:
-        """
-        Get a value from Redis by key.
-        Deserialize JSON if the value is a JSON string.
-        """
-        try:
-            async with self.r as client:
-                value = await client.get(key)
-                if value is None:
-                    return None
-                # Try to deserialize as JSON, fallback to raw value
-                try:
-                    return json.loads(value)
-                except json.JSONDecodeError:
-                    return value
-        except (ConnectionError, TimeoutError) as e:
-            logger.error(f"Failed to get key {key} from Redis: {e}")
-            raise
+        @self.redis_breaker
+        def protected_set():
+            if ttl is not None:
+                self.redis.set(key, value, ex=int(ttl))
+            else:
+                self.redis.set(key, value, ex=int(self.config.ttl))
 
-    async def delete(self, key: str) -> None:
-        """Delete a key from Redis."""
         try:
-            async with self.r as client:
-                await client.delete(key)
+            protected_set()
+        except pybreaker.CircuitBreakerError:
+            logger.error(f"Circuit breaker is open: failed to set key {key}")
         except (ConnectionError, TimeoutError) as e:
-            logger.error(f"Failed to delete key {key} from Redis: {e}")
-            raise
+            logger.error(f"Redis set error: {e}")
 
-    async def close(self):
-        """Close Redis connection pool."""
-        await self.r.close()
-        await self.pool.disconnect()
-        logger.info("Redis connection pool closed")
+    def get(self, key: str) -> Optional[Any]:
+        @self.redis_breaker
+        def protected_get():
+            return self.redis.get(key)
+
+        try:
+            result = protected_get()
+            try:
+                return json.loads(result)
+            except (TypeError, json.JSONDecodeError):
+                return result
+        except pybreaker.CircuitBreakerError:
+            logger.error(f"Circuit breaker is open: failed to get key {key}")
+            return None
+        except (ConnectionError, TimeoutError) as e:
+            logger.error(f"Redis get error: {e}")
+            return None
+
+    def delete(self, key: str) -> None:
+        @self.redis_breaker
+        def protected_delete():
+            self.redis.delete(key)
+
+        try:
+            protected_delete()
+        except pybreaker.CircuitBreakerError:
+            logger.error(f"Circuit breaker is open: failed to delete key {key}")
+        except (ConnectionError, TimeoutError) as e:
+            logger.error(f"Redis delete error: {e}")

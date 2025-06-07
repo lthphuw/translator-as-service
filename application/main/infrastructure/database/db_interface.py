@@ -2,8 +2,7 @@ import abc
 from typing import Dict
 
 
-class DataBaseOperations(abc.ABC):
-
+class IDataBaseOperations(abc.ABC):
     def __init__(self):
         super().__init__()
 

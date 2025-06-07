@@ -3,11 +3,11 @@ from typing import Dict
 from pymongo import MongoClient
 
 from application.main.config import settings
-from application.main.infrastructure.database.db_interface import DataBaseOperations
+from application.main.infrastructure.database.db_interface import IDataBaseOperations
 from application.main.utility.config_loader import ConfigReaderInstance
 
 
-class Mongodb(DataBaseOperations):
+class Mongodb(IDataBaseOperations):
     def __init__(self):
         super().__init__()
         self.db_config = ConfigReaderInstance.yaml.read_config_from_file(

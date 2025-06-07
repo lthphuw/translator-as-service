@@ -1,12 +1,11 @@
 import logging
+
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
-import redis
-from redis.exceptions import ConnectionError, TimeoutError
 
 from application.main.infrastructure.cache.redis.operations import Redis
 
@@ -14,43 +13,19 @@ logger = logging.getLogger(__name__)
 _limiter = None
 
 
-def test_redis_connection(url: str) -> bool:
-    try:
-        client = redis.Redis.from_url(url)
-        client.ping()
-        logger.info(f"[RateLimit] Successfully connected to Redis at {url}")
-        return True
-    except (ConnectionError, TimeoutError) as e:
-        logger.warning(f"[RateLimit] Redis unavailable: {e}")
-        return False
-
-
 def get_limiter() -> Limiter:
     global _limiter
     if _limiter is not None:
         return _limiter
 
-    redis_url = Redis.get_uri()
-    storage_uri = (
-        redis_url if redis_url.startswith("redis://") else f"redis://{redis_url}"
+    storage_uri = Redis.get_uri()
+    _limiter = Limiter(
+        key_func=get_remote_address,
+        default_limits=["5/minute"],
+    strategy="sliding-window-counter",
+        storage_uri=storage_uri,
+        in_memory_fallback_enabled=True,
     )
-
-    if test_redis_connection(redis_url):
-        logger.info("[RateLimit] Using Redis storage")
-        _limiter = Limiter(
-            key_func=get_remote_address,
-            default_limits=["5/minute"],
-            strategy="sliding-window-counter",
-            storage_uri=storage_uri,
-        )
-    else:
-        logger.warning("[RateLimit] Falling back to MemoryStorage")
-        _limiter = Limiter(
-            key_func=get_remote_address,
-            default_limits=["5/minute"],
-            strategy="sliding-window-counter",
-            storage_uri="memory://",
-        )
     return _limiter
 
 

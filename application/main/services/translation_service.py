@@ -30,7 +30,7 @@ class TranslationService(object):
 
         return {
             "results": results,
-            "time": f"{round(duration_ms / 1000, 2)}s",
+            "time": f"{(duration_ms / 1000):2f}s",
             "src_lang": src_lang,
             "tgt_lang": tgt_lang,
         }

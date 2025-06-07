@@ -3,6 +3,7 @@
 ## Introduction: Project Structure
 
 - `api_template/` — Contains all API related code:
+
   - `manage.py` — Entry point for the API. Contains no business logic.
   - `.env` — Global configuration file for the API. Avoid putting application/module level configs here.
   - `application/` — Main source code and test modules for the API. Prefer to keep this folder at the project root.
@@ -29,3 +30,11 @@
 ```bash
 pip install -r requirements.txt
 python manage.py
+```
+
+## Docker support
+
+```bash
+docker build -t translator-as-service .
+docker run --env-file .env --gpus all -p 8080:8080 translator-as-service:latest
+```

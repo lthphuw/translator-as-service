@@ -24,7 +24,7 @@ class GlobalConfig(BaseSettings):
 
     APP_CONFIG: AppConfig = AppConfig()
 
-    API_NAME: str = Field(default="Default API Name", validation_alias="API_NAME")
+    API_NAME: str = Field(default="Translator Service", validation_alias="API_NAME")
     API_DESCRIPTION: str = Field(
         default="Default description", validation_alias="API_DESCRIPTION"
     )
