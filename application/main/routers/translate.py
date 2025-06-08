@@ -6,8 +6,7 @@ from pydantic import BaseModel
 from starlette.requests import Request as StarletteRequest
 
 from application.initializer import limiter_instance, logger_instance
-from application.main.services.language_detector_service import LanguageDetectorService
-from application.main.services.translation_service import TranslationService
+from application.main.services import LanguageDetectorService, TranslationService
 
 
 class TranslationRequest(BaseModel):
@@ -24,7 +23,7 @@ logger = logger_instance.get_logger(__name__)
 
 
 @router.post("/")
-@limiter.limit("5/minute")
+@limiter.limit("50/minute")
 async def translate(request: StarletteRequest, translation_request: TranslationRequest):
     logger.debug(
         "Received translation request", extra={"payload": translation_request.dict()}
@@ -58,9 +57,17 @@ async def translate(request: StarletteRequest, translation_request: TranslationR
                 "num_texts": len(translation_request.texts),
             },
         )
-        
+
         return JSONResponse(content=results, status_code=200)
 
+    except RuntimeError as e:
+        if str(e) == "Server is busy. Please try again later.":
+            logger.warning("Request rejected due to overload")
+            return JSONResponse(
+                content={"detail": "Server is busy. Please try again later."},
+                status_code=429,
+            )
+        raise e
     except ValueError as e:
         logger.error(
             "Translation failed",

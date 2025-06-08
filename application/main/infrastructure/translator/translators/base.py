@@ -19,7 +19,7 @@ class BaseTranslator(ABC):
     """Abstract base class for translation models with extensible model type support."""
 
     # Model type registry: maps model_type to (model_class, tokenizer_class)
-    _MODEL_REGISTRY = {
+    _MODEL_FACTORY = {
         "AutoModelForSeq2SeqLM": (AutoModelForSeq2SeqLM, AutoTokenizer),
         "MarianMTModel": (MarianMTModel, MarianTokenizer),
     }
@@ -35,7 +35,8 @@ class BaseTranslator(ABC):
         else "cpu"
     )
     
-    _torch_dtype = torch.float32
+    # Use float16 on mps can cause meta tensor error
+    _torch_dtype = torch.float16 if _device.type == "cuda" else torch.float32
     _return_tensor = "pt"
     _padding = True
     _truncation = True
@@ -47,9 +48,9 @@ class BaseTranslator(ABC):
         """Initialize the translator, validating model configuration."""
         if not self.model_name:
             raise ValueError(f"model_name must be defined in {self.__class__.__name__}")
-        if self.model_type not in self._MODEL_REGISTRY:
+        if self.model_type not in self._MODEL_FACTORY:
             raise ValueError(
-                f"Invalid model_type: {self.model_type}. Supported types: {list(self._MODEL_REGISTRY.keys())}"
+                f"Invalid model_type: {self.model_type}. Supported types: {list(self._MODEL_FACTORY.keys())}"
             )
 
     def device(self) -> str:
@@ -83,7 +84,7 @@ class BaseTranslator(ABC):
 
     def _prepare_model(self, model_exists: bool) -> None:
         """Prepares the model and tokenizer for inference."""
-        model_class, tokenizer_class = self._MODEL_REGISTRY[self.model_type]
+        model_class, tokenizer_class = self._MODEL_FACTORY[self.model_type]
 
         logger.info(
             f"Loading tokenizer from {'local path' if model_exists else 'Hugging Face Hub'}: "
@@ -98,14 +99,12 @@ class BaseTranslator(ABC):
             f"{self.model_path if model_exists else self.model_name}"
         )
 
-        torch_dtype = torch.float16 if self._device.type == "cuda" else torch.float32
-
         try:
             self.model = model_class.from_pretrained(
                 self.model_path if model_exists else self.model_name,
-                torch_dtype=torch_dtype,
-                device_map=None,                  
-                low_cpu_mem_usage=False           
+                torch_dtype=self._torch_dtype,
+                device_map=None,
+                low_cpu_mem_usage=False,
             )
             self.model.to(self._device)
             
@@ -130,7 +129,7 @@ class BaseTranslator(ABC):
         model_temp = model_class.from_pretrained(
             self.model_path if model_exists else self.model_name,
             device_map="cpu",
-            torch_dtype=torch.float32,
+            torch_dtype=self._torch_dtype,
             low_cpu_mem_usage=False
         )
         model_temp.to_empty(device=self._device)

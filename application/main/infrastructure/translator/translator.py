@@ -1,18 +1,13 @@
+import asyncio
 import hashlib
-from concurrent.futures import ThreadPoolExecutor
-from typing import Callable, Dict, List
+from typing import Dict, List
 
 import torch
 
 from application.initializer import cache_instance, logger_instance
 from application.main.infrastructure.translator.translators import (
+    TRANSLATOR_FACTORY,
     BaseTranslator,
-    EnFrTranslator,
-    EnViTranslator,
-    FrEnTranslator,
-    FrViTranslator,
-    ViEnTranslator,
-    ViFrTranslator,
 )
 
 logger = logger_instance.get_logger(__name__)
@@ -22,7 +17,8 @@ _cache = cache_instance
 class UniversalTranslator:
     """UniversalTranslator provides translation services between supported language pairs.
 
-    This class manages multiple translation models, handles model loading in parallel, and caches translation results for efficiency.
+    This class manages multiple translation models, acts like Registry Pattern,
+    handles model loading, and caches translation results for efficiency.
     """
 
     SUPPORTED_LANGUAGES: Dict[str, List[str]] = {
@@ -31,46 +27,41 @@ class UniversalTranslator:
         "fr": ["en", "vi"],
     }
 
-    TRANSLATOR_FACTORIES: Dict[str, Callable[[], BaseTranslator]] = {
-        "vi2fr": ViFrTranslator,
-        "vi2en": ViEnTranslator,
-        "en2fr": EnFrTranslator,
-        "en2vi": EnViTranslator,
-        "fr2en": FrEnTranslator,
-        "fr2vi": FrViTranslator,
-    }
-
     def __init__(self):
         self.translators: Dict[str, BaseTranslator] = {}
 
         for src_lang, tgt_langs in self.SUPPORTED_LANGUAGES.items():
             for tgt_lang in tgt_langs:
                 key = self.__key(src_lang, tgt_lang)
-                logger.info(f"Loading translator model: {key}")
+                logger.info(f"Register translator model: {key}")
                 try:
-                    self.__load_translator(src_lang, tgt_lang)
+                    self.__register_translator(src_lang, tgt_lang)
                 except Exception as e:
                     logger.error(f"Failed to load translator {key}: {e}")
                     raise
 
-    def __load_translator(self, src_lang: str, tgt_lang: str):
+    def __key(self, src_lang: str, tgt_lang: str) -> str:
+        return f"{src_lang}2{tgt_lang}"
+
+    def _make_cache_key(self, src_lang: str, tgt_lang: str, text: str) -> str:
+        prefix = self.__key(src_lang, tgt_lang)
+        return f"{prefix}:{hashlib.md5(text.encode()).hexdigest()}"
+
+    def __register_translator(self, src_lang: str, tgt_lang: str):
         key = self.__key(src_lang, tgt_lang)
         if key not in self.translators:
-            factory = self.TRANSLATOR_FACTORIES.get(key)
+            factory = TRANSLATOR_FACTORY.get(key)
             if not factory:
                 raise ValueError(f"No translator factory for {key}")
             self.translators[key] = factory()
             logger.info(f"Loading translator model: {key} Finished!")
 
-    def __key(self, src_lang: str, tgt_lang: str) -> str:
-        return f"{src_lang}2{tgt_lang}"
-
     def __get_translator(self, src_lang: str, tgt_lang: str) -> BaseTranslator:
         key = self.__key(src_lang, tgt_lang)
-        if translator := self.translators.get(key):
-            return translator
-        else:
+        translator = self.translators.get(key)
+        if translator is None:
             raise ValueError(f"Translator for {key} not loaded")
+        return translator
 
     async def translate(
         self, texts: List[str], src_lang: str, tgt_lang: str
@@ -83,11 +74,11 @@ class UniversalTranslator:
 
         translator = self.__get_translator(src_lang, tgt_lang)
         cache_key_prefix = self.__key(src_lang, tgt_lang)
-        cached_results = {}
-        texts_to_translate = []
+        cached_results: Dict[str, str] = {}
+        texts_to_translate: List[str] = []
 
         for text in texts:
-            key = cache_key_prefix + hashlib.md5(text.encode()).hexdigest()
+            key = self._make_cache_key(src_lang, tgt_lang, text)
             if result := _cache.get(key):
                 logger.debug(f"cache hit: {cache_key_prefix}:{text}")
                 cached_results[text] = result.decode("utf-8")
@@ -96,12 +87,14 @@ class UniversalTranslator:
 
         if texts_to_translate:
             logger.debug(
-                f"translating {len(texts_to_translate)} texts with {src_lang}2{tgt_lang}"
+                f"translating {len(texts_to_translate)} texts with {cache_key_prefix}"
             )
-            new_translations = translator.translate(texts_to_translate)
+            translations = await asyncio.to_thread(
+                translator.translate, texts_to_translate
+            )
 
-            for text, translated in zip(texts_to_translate, new_translations):
-                key = cache_key_prefix + hashlib.md5(text.encode()).hexdigest()
+            for text, translated in zip(texts_to_translate, translations):
+                key = self._make_cache_key(src_lang, tgt_lang, text)
                 cached_results[text] = translated
                 _cache.set(key, translated)
 

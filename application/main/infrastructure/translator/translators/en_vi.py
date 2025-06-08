@@ -16,6 +16,7 @@ class EnViTranslator(BaseTranslator):
             return_tensors=self._return_tensor,
             padding=self._padding,
             truncation=self._truncation,
+            max_length=self._max_length,
         ).to(self._device)
         outputs = self.model.generate(
             inputs.input_ids,
