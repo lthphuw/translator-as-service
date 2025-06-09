@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from starlette.requests import Request as StarletteRequest
 
 from application.initializer import limiter_instance, logger_instance
-from application.main.services import LanguageDetectorService, TranslationService
+from application.main.services import DetectorService, TranslationService
 
 
 class TranslationRequest(BaseModel):
@@ -16,7 +16,7 @@ class TranslationRequest(BaseModel):
 
 
 translation_service = TranslationService()
-language_detector_service = LanguageDetectorService()
+language_detector_service = DetectorService()
 router = APIRouter(prefix="/translate")
 limiter = limiter_instance
 logger = logger_instance.get_logger(__name__)
@@ -35,7 +35,7 @@ async def translate(request: StarletteRequest, translation_request: TranslationR
                 extra={"payload": translation_request.dict()},
             )
             detected_result = await language_detector_service.detect(
-                text=translation_request.texts[0]
+                translation_request.texts
             )
             translation_request.src_lang = detected_result["detected_lang"]
 

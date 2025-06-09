@@ -9,7 +9,7 @@ from application.main.config import settings
 logger = logger_instance.get_logger(__name__)
 
 
-class BaseLanguageDetector(abc.ABC):
+class BaseDetector(abc.ABC):
     model_name = ""
 
     def __init__(self):
@@ -79,5 +79,5 @@ class BaseLanguageDetector(abc.ABC):
         self.model.eval()
 
     @abc.abstractmethod
-    def detect(self, text: str) -> str:
+    def detect(self, texts: list[str], topk=3) -> list[dict]:
         raise NotImplementedError()

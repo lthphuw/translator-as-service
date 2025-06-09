@@ -1,1 +1,0 @@
-from application.main.infrastructure.lang_detector.detector import LanguageDetector

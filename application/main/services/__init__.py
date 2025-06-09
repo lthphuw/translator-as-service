@@ -1,2 +1,2 @@
-from application.main.services.language_detector_service import LanguageDetectorService
+from application.main.services.language_detector_service import DetectorService
 from application.main.services.translation_service import TranslationService

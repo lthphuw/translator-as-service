@@ -9,6 +9,7 @@ class AppConfig(BaseModel):
     SETTINGS_DIR: Path = BASE_DIR / "settings"
     LOGS_DIR: Path = BASE_DIR / "logs"
     MODELS_DIR: Path = BASE_DIR / "models"
+    RESOURCES_DIR: Path = BASE_DIR / "resources"
     CACHE_DIR: Path = BASE_DIR / "cache"
 
     def __init__(self, **data):
@@ -16,6 +17,7 @@ class AppConfig(BaseModel):
         self.SETTINGS_DIR.mkdir(parents=True, exist_ok=True)
         self.LOGS_DIR.mkdir(parents=True, exist_ok=True)
         self.MODELS_DIR.mkdir(parents=True, exist_ok=True)
+        self.RESOURCES_DIR.mkdir(parents=True, exist_ok=True)
         self.CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 

@@ -3,19 +3,19 @@ import time
 from typing import Dict
 
 from application.initializer import logger_instance
-from application.main.infrastructure.lang_detector import LanguageDetector
+from application.main.infrastructure.detector import Detector
 
 
-class LanguageDetectorService(object):
+class DetectorService(object):
     _max_concurrent_inference = 5
     _semaphore = asyncio.Semaphore(_max_concurrent_inference)
     _semaphore_timeout_sec = 10
 
     def __init__(self):
         self.logger = logger_instance.get_logger(__name__)
-        self.detector = LanguageDetector()
+        self.detector = Detector()
 
-    async def detect(self, text: str) -> Dict:
+    async def detect(self, texts: list[str]) -> Dict:
         try:
             await asyncio.wait_for(
                 self._semaphore.acquire(), timeout=self._semaphore_timeout_sec
@@ -25,13 +25,13 @@ class LanguageDetectorService(object):
 
         try:
             start_time = time.time()
-            lang = self.detector.detect(text)
+            lang = self.detector.detect(texts)[0]["language"]
             duration_ms = (time.time() - start_time) * 1000
 
             self.logger.info(
-                f"Detecting language text {text}: {lang}",
+                f"Detecting language texts {texts}: {lang}",
                 extra={
-                    "input": text,
+                    "input": texts,
                     "detected_lang": lang,
                     "duration_ms": duration_ms,
                 },
@@ -41,6 +41,6 @@ class LanguageDetectorService(object):
                 "detected_lang": lang,
                 "time": f"{round(duration_ms / 1000, 2)}s",
             }
-            
+
         finally:
             self._semaphore.release()
